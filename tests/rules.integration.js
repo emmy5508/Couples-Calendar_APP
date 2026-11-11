@@ -145,3 +145,91 @@ test("calendar isolation, invitations, roles and transfer", async () => {
   await assertSucceeds(deleteDoc(doc(editor, "invites", token)));
   await assertSucceeds(deleteDoc(doc(editor, "calendars", c)));
 });
+
+test("nickname privacy, legacy members and self-only nickname updates", async () => {
+  const calendar = "nickname-calendar";
+  const invite = "abcdef1234567890abcdef1234567890";
+  let batch = writeBatch(owner);
+  batch.set(doc(owner, "users", "owner"), { nickname: "小花" });
+  batch.set(doc(owner, "calendars", calendar), {
+    name: "暱稱測試",
+    owner: "owner",
+    invite: "",
+    createdAt: 2,
+  });
+  batch.set(doc(owner, "calendars", calendar, "members", "owner"), {
+    role: "owner",
+    email: "owner@test.example",
+    token: "",
+    nickname: "小花",
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(
+    setDoc(doc(owner, "invites", invite), { calendarId: calendar }),
+  );
+  await assertSucceeds(
+    setDoc(doc(viewer, "calendars", calendar, "members", "viewer"), {
+      role: "viewer",
+      email: "viewer@test.example",
+      token: invite,
+    }),
+  );
+  // A legacy membership without nickname can adopt its owner's private nickname.
+  batch = writeBatch(viewer);
+  batch.set(doc(viewer, "users", "viewer"), { nickname: "阿明" });
+  batch.update(doc(viewer, "calendars", calendar, "members", "viewer"), {
+    nickname: "阿明",
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(getDoc(doc(viewer, "users", "viewer")));
+  await assertFails(getDoc(doc(owner, "users", "viewer")));
+  await assertFails(getDoc(doc(stranger, "users", "viewer")));
+  await assertFails(
+    setDoc(doc(db("viewer", false), "users", "viewer"), { nickname: "未驗證" }),
+  );
+  await assertFails(
+    setDoc(doc(viewer, "users", "viewer"), { nickname: " ".repeat(5) }),
+  );
+  await assertFails(
+    setDoc(doc(viewer, "users", "viewer"), { nickname: "\t\n" }),
+  );
+  await assertFails(
+    setDoc(doc(viewer, "users", "viewer"), { nickname: "a".repeat(31) }),
+  );
+  await assertFails(
+    setDoc(doc(viewer, "users", "viewer"), { nickname: "阿明", admin: true }),
+  );
+  await assertFails(
+    updateDoc(doc(viewer, "calendars", calendar, "members", "viewer"), {
+      nickname: "冒用其他暱稱",
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(owner, "calendars", calendar, "members", "viewer"), {
+      nickname: "替別人改名",
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(viewer, "calendars", calendar, "members", "viewer"), {
+      nickname: "阿明",
+      role: "owner",
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(viewer, "calendars", calendar, "members", "viewer"), {
+      nickname: "阿明",
+      email: "someone@test.example",
+    }),
+  );
+  batch = writeBatch(viewer);
+  batch.set(doc(viewer, "users", "viewer"), { nickname: "新的阿明" });
+  batch.update(doc(viewer, "calendars", calendar, "members", "viewer"), {
+    nickname: "新的阿明",
+  });
+  await assertSucceeds(batch.commit());
+  const member = await assertSucceeds(
+    getDoc(doc(owner, "calendars", calendar, "members", "viewer")),
+  );
+  if (member.data().nickname !== "新的阿明")
+    throw new Error("Nickname did not sync");
+});

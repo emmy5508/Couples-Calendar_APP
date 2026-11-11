@@ -48,6 +48,7 @@ import {
 import { auth, db } from "./firebase";
 import { today, monthDays, shiftMonth, onDate, addDays } from "./dates";
 import { createInviteToken } from "./invitations";
+import { memberName, normalizeNickname } from "./nicknames";
 import "./style.css";
 const palette = [
   "#b4c9a8",
@@ -69,6 +70,7 @@ const errText = (e) =>
     "permission-denied":
       "沒有操作權限，請確認信箱已驗證，並已部署資料庫安全規則。",
     unavailable: "目前無法連線，請稍後重試",
+    "profile/invalid-nickname": "請輸入 1～30 個字的暱稱。",
     "invite/unsupported-browser":
       "目前瀏覽器無法產生安全邀請連結，請改用 Safari 或 Chrome 開啟網站。",
     "invite/calendar-unavailable": "日曆尚未載入完成，請重新整理後再邀請家人。",
@@ -202,6 +204,8 @@ function App() {
     [inviteLink, setInviteLink] = useState(""),
     [loading, setLoading] = useState(false),
     [serverReady, setServerReady] = useState(false);
+  const [nickname, setNickname] = useState("");
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const uid = demo ? "demo" : user?.uid,
     role = demo ? "owner" : members.find((m) => m.id === uid)?.role,
     canEdit = role === "owner" || role === "editor";
@@ -250,6 +254,50 @@ function App() {
     } finally {
       setBusy(false);
     }
+  };
+  useEffect(() => {
+    setNickname("");
+    setProfileLoaded(false);
+    if (!user?.emailVerified || demo) return;
+    return onSnapshot(
+      doc(db, "users", user.uid),
+      (snapshot) => {
+        setNickname(snapshot.data()?.nickname || "");
+        setProfileLoaded(true);
+      },
+      (error) => {
+        setNotice(errText(error));
+        setProfileLoaded(true);
+      },
+    );
+  }, [user?.uid, user?.emailVerified, demo]);
+  const saveNickname = async (value) => {
+    const name = normalizeNickname(value);
+    const subscriptions = await getDocs(
+      collection(db, "users", uid, "subscriptions"),
+    );
+    const references = await Promise.all(
+      subscriptions.docs.map(async (subscription) => {
+        const ref = doc(db, "calendars", subscription.id, "members", uid);
+        try {
+          return (await getDoc(ref)).exists() ? ref : null;
+        } catch (error) {
+          if (error.code === "permission-denied") return null;
+          throw error;
+        }
+      }),
+    );
+    const refs = references.filter(Boolean);
+    for (let offset = 0; offset < Math.max(1, refs.length); offset += 400) {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "users", uid), { nickname: name });
+      refs
+        .slice(offset, offset + 400)
+        .forEach((ref) => batch.update(ref, { nickname: name }));
+      await batch.commit();
+    }
+    setModal((current) => (current === "nickname" ? "" : current));
+    setNotice("暱稱已儲存，家人會看到新的暱稱。");
   };
   useEffect(() => {
     if (!user?.emailVerified || demo) return;
@@ -350,7 +398,7 @@ function App() {
     setCalendars([c]);
     setCats(demoCategories);
     setEvents(demoEvents());
-    setMembers([{ id: "demo", email: "體驗中的你", role: "owner" }]);
+    setMembers([{ id: "demo", nickname: "體驗中的你", role: "owner" }]);
   };
   const createCalendar = async (name) => {
     if (demo) {
@@ -362,6 +410,7 @@ function App() {
     b.set(ref, { name, owner: uid, invite: "", createdAt: Date.now() });
     b.set(doc(ref, "members", uid), {
       email: user.email,
+      nickname,
       role: "owner",
       token: "",
     });
@@ -389,6 +438,7 @@ function App() {
       let b = writeBatch(db);
       b.set(doc(db, "calendars", id, "members", uid), {
         email: user.email,
+        nickname,
         role: "viewer",
         token,
       });
@@ -600,6 +650,34 @@ function App() {
         </div>
       </main>
     );
+  if (!demo && !profileLoaded)
+    return (
+      <div className="splash">
+        <Flower2 />
+        正在載入個人設定…
+      </div>
+    );
+  if (!demo && !nickname)
+    return (
+      <main className="auth">
+        <section className="auth-card">
+          <Flower2 size={36} />
+          <h1>讓家人知道你是誰 🌷</h1>
+          <p>
+            設定一個暱稱，日曆成員與活動參與者都會顯示暱稱，不顯示你的信箱。
+          </p>
+          <NicknameForm
+            nickname=""
+            busy={busy || !online}
+            save={(value) => run(() => saveNickname(value))}
+          />
+          <button className="full" onClick={logout}>
+            登出
+          </button>
+          {notice && <p role="status">{notice}</p>}
+        </section>
+      </main>
+    );
   return (
     <div className="app">
       <aside className={side ? "sidebar open" : "sidebar"}>
@@ -710,14 +788,23 @@ function App() {
         </div>
         <div className="profile">
           <span className="avatar">
-            {(user?.email || "你")[0].toUpperCase()}
+            {Array.from(demo ? "你" : nickname)[0]}
           </span>
           <div>
-            <strong>{demo ? "體驗模式" : user?.email?.split("@")[0]}</strong>
+            <strong>{demo ? "體驗模式" : nickname}</strong>
             <small>
               {demo ? "資料僅供體驗" : roleNames[role] || "我的帳號"}
             </small>
           </div>
+          {!demo && (
+            <button
+              className="icon"
+              aria-label="修改暱稱"
+              onClick={() => setModal("nickname")}
+            >
+              <Settings size={16} />
+            </button>
+          )}
           <button
             className="icon"
             aria-label="登出"
@@ -1105,6 +1192,16 @@ function App() {
           <Plus size={27} />
         </button>
       )}
+      {modal === "nickname" && (
+        <Modal title="修改我的暱稱" close={() => setModal("")}>
+          <p className="help">修改後，你加入的日曆都會同步顯示新暱稱。</p>
+          <NicknameForm
+            nickname={nickname}
+            busy={busy || !online}
+            save={(value) => run(() => saveNickname(value))}
+          />
+        </Modal>
+      )}
       {modal === "create" && (
         <Modal title="種下一本新日曆 🌱" close={() => setModal("")}>
           <form
@@ -1224,13 +1321,18 @@ function App() {
               管理活動分類與家庭標籤
             </button>
           )}
+          {!demo && (
+            <button className="full" onClick={() => setModal("nickname")}>
+              修改我的暱稱
+            </button>
+          )}
           <h3>一起使用的人</h3>
           {members.map((m) => (
             <div className="member-row" key={m.id}>
-              <span className="avatar">{m.email[0].toUpperCase()}</span>
+              <span className="avatar">{Array.from(memberName(m))[0]}</span>
               <div>
                 <strong>
-                  {m.email}
+                  {memberName(m)}
                   {m.id === uid ? "（你）" : ""}
                 </strong>
                 <small>{roleNames[m.role]}</small>
@@ -1238,7 +1340,7 @@ function App() {
               {role === "owner" && m.id !== uid && !demo && (
                 <div className="member-actions">
                   <select
-                    aria-label={"設定" + m.email + "的權限"}
+                    aria-label={"設定" + memberName(m) + "的權限"}
                     value={m.role}
                     disabled={busy || !online}
                     onChange={(e) =>
@@ -1304,6 +1406,34 @@ function App() {
         </Modal>
       )}
     </div>
+  );
+}
+function NicknameForm({ nickname, busy, save }) {
+  const [value, setValue] = useState(nickname);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        save(value);
+      }}
+    >
+      <label>
+        暱稱
+        <input
+          name="nickname"
+          autoComplete="nickname"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          maxLength={30}
+          required
+          placeholder="例如：小花、爸爸"
+        />
+      </label>
+      <p className="help">1～30 個字，可隨時在帳號或日曆設定修改。</p>
+      <button className="primary full" disabled={busy || !value.trim()}>
+        儲存暱稱
+      </button>
+    </form>
   );
 }
 function Auth({ run, busy, notice, startDemo }) {
@@ -1680,7 +1810,7 @@ function EventForm({
                     )
                   }
                 />
-                {m.email}
+                {memberName(m)}
               </label>
             ))}
           </div>

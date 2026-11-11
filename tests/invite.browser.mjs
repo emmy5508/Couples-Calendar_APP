@@ -37,6 +37,10 @@ async function register(context, url, name) {
   );
   assert.ok(r.ok);
   await page.getByRole("button", { name: "我已完成驗證" }).click();
+  await page
+    .getByLabel("暱稱", { exact: true })
+    .fill(name === "owner" ? "小花" : "阿明");
+  await page.getByRole("button", { name: "儲存暱稱", exact: true }).click();
   await page.getByRole("button", { name: "建立第一本日曆" }).waitFor();
   return page;
 }
@@ -72,8 +76,39 @@ try {
   await expect(
     family.getByRole("button", { name: "邀請家人", exact: true }),
   ).toBeDisabled();
+  await owner.getByRole("button", { name: "關閉", exact: true }).click();
+  await owner.getByRole("button", { name: "日曆設定", exact: true }).click();
+  await expect(
+    owner.getByRole("dialog").getByText("阿明", { exact: true }),
+  ).toBeVisible();
+  assert.ok(
+    !(await owner.getByRole("dialog").innerText()).includes("@example.test"),
+  );
+  await family.getByRole("button", { name: "日曆設定", exact: true }).click();
+  await family
+    .getByRole("button", { name: "修改我的暱稱", exact: true })
+    .click();
+  await family.getByLabel("暱稱", { exact: true }).fill("阿明的新暱稱");
+  await family.getByRole("button", { name: "儲存暱稱", exact: true }).click();
+  await expect(
+    owner.getByRole("dialog").getByText("阿明的新暱稱", { exact: true }),
+  ).toBeVisible();
+  assert.ok(
+    !(await owner.getByRole("dialog").innerText()).includes("@example.test"),
+  );
+  await owner.getByRole("button", { name: "關閉", exact: true }).click();
+  await owner
+    .getByRole("button", { name: "新增行程", exact: true })
+    .first()
+    .click();
+  await expect(
+    owner.getByRole("dialog").getByText("阿明的新暱稱", { exact: true }),
+  ).toBeVisible();
+  assert.ok(
+    !(await owner.getByRole("dialog").innerText()).includes("@example.test"),
+  );
   console.log(
-    "Invitation works without randomUUID; verified family joins with viewer role",
+    "Invitation and nickname onboarding, live member nickname updates and participant privacy passed",
   );
 } catch (error) {
   for (const context of browser.contexts())

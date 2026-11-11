@@ -1518,3 +1518,11 @@ details p {
     display: none;
   }
 }
+
+.profile > div {
+  flex: 1;
+  min-width: 0;
+}
+.profile strong {
+  max-width: 100%;
+}

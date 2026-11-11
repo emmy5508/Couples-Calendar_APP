@@ -71,7 +71,7 @@ npm run test:browser
 
 ```sh
 # 終端一
-npx firebase emulators:start --only auth --project demo-shared-calendar
+npx firebase emulators:start --only auth,firestore --project demo-shared-calendar
 # 終端二
 VITE_USE_EMULATORS=true npm run dev -- --port 5174
 # 終端三
@@ -91,7 +91,7 @@ node tests/auth.browser.mjs
 ## 資料結構
 
 - `calendars/{calendarId}`：名稱、擁有者、邀請 token。
-- `calendars/{calendarId}/members/{uid}`：角色、Email、加入 token。
+- `calendars/{calendarId}/members/{uid}`：角色、暱稱、身分驗證用 Email、加入 token。
 - `calendars/{calendarId}/categories/{id}`：活動分類／家庭標籤。
 - `calendars/{calendarId}/events/{id}`：活動、重複規則與以原始發生日為鍵的單次例外。
 - `users/{uid}/subscriptions/{calendarId}`：只允許本人讀寫的日曆索引。
@@ -129,3 +129,9 @@ FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/wo
 ```
 
 此測試使用兩個隔離的瀏覽器帳號，驗證新日曆的邀請連結產生及家人以檢視者加入，並模擬缺少 randomUUID 的瀏覽器。
+
+### 暱稱
+
+完成信箱驗證後需設定 1～30 字暱稱；舊帳號下次登入也會補填。可從側欄帳號的「修改暱稱」或日曆設定的「修改我的暱稱」變更。修改會同步更新自己已加入日曆的成員資料。「一起使用的人」、參與成員和帳號顯示均使用暱稱，不以信箱作為未設定時的替代；未補填的家人顯示「尚未設定暱稱」。
+
+`users/{uid}` 保存僅本人可讀寫的暱稱設定，日曆 member 文件保存成員暱稱副本。本人只能變更自己的暱稱，不可藉此更動角色或信箱；暱稱更新與個人設定以批次寫入，已退出／已刪除日曆的舊索引會跳過。信箱仍用於登入與驗證。此更新需同時部署網站和 Firestore 安全規則。

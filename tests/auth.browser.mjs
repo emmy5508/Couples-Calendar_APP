@@ -43,6 +43,8 @@ try {
   );
   assert.equal(verifyResult.ok, true);
   await page.getByRole("button", { name: "我已完成驗證" }).click();
+  await page.getByLabel("暱稱", { exact: true }).fill("測試家人");
+  await page.getByRole("button", { name: "儲存暱稱", exact: true }).click();
   await page.getByRole("button", { name: "建立第一本日曆" }).waitFor();
   await page.getByRole("button", { name: "開啟選單" }).click();
   await page.getByRole("button", { name: "登出", exact: true }).click();

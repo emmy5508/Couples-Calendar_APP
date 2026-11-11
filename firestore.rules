@@ -6,6 +6,11 @@ service cloud.firestore {
   function owner(c) { return verified() && cal(c).owner == request.auth.uid; }
   function member(c) { return verified() && exists(/databases/$(database)/documents/calendars/$(c)/members/$(request.auth.uid)); }
   function editor(c) { return member(c) && get(/databases/$(database)/documents/calendars/$(c)/members/$(request.auth.uid)).data.role in ['owner','editor']; }
+  function validNickname(value) { return value is string && value.size() > 0 && value.size() <= 30 && value.matches('.*[^\\s].*'); }
+  match /users/{uid} {
+   allow get: if verified() && request.auth.uid == uid;
+   allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['nickname']) && validNickname(request.resource.data.nickname);
+  }
   match /users/{uid}/subscriptions/{c} {
    allow read, delete: if verified() && request.auth.uid == uid;
    allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['calendarId']) && request.resource.data.calendarId == c && existsAfter(/databases/$(database)/documents/calendars/$(c)/members/$(uid));
@@ -25,8 +30,8 @@ service cloud.firestore {
    allow delete: if owner(c);
    match /members/{uid} {
     allow read: if member(c);
-    allow create: if verified() && uid == request.auth.uid && request.resource.data.keys().hasOnly(['role','email','token']) && request.resource.data.email == request.auth.token.email && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (request.resource.data.role == 'viewer' && get(/databases/$(database)/documents/invites/$(request.resource.data.token)).data.calendarId == c));
-    allow update: if owner(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && request.resource.data.role in ['owner','editor','viewer'] && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner != uid && request.resource.data.role != 'owner'));
+    allow create: if verified() && uid == request.auth.uid && request.resource.data.keys().hasOnly(['role','email','token','nickname']) && (!request.resource.data.keys().hasAny(['nickname']) || (validNickname(request.resource.data.nickname) && request.resource.data.nickname == getAfter(/databases/$(database)/documents/users/$(uid)).data.nickname)) && request.resource.data.email == request.auth.token.email && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (request.resource.data.role == 'viewer' && get(/databases/$(database)/documents/invites/$(request.resource.data.token)).data.calendarId == c));
+    allow update: if (verified() && request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname']) && validNickname(request.resource.data.nickname) && request.resource.data.nickname == getAfter(/databases/$(database)/documents/users/$(uid)).data.nickname) || (owner(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && request.resource.data.role in ['owner','editor','viewer'] && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner != uid && request.resource.data.role != 'owner')));
     allow delete: if verified() && (owner(c) || request.auth.uid == uid) && (cal(c).owner != uid || !existsAfter(/databases/$(database)/documents/calendars/$(c)));
    }
    match /categories/{id} {
