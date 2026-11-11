@@ -34,3 +34,11 @@ Firestore 整合測試設計涵蓋：陌生人不可讀取、未驗證者不可�
 - 成功命令：`FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/workspace/.firebase-config FIREBASE_CLI_DISABLE_UPDATE_CHECK=1 npm run test:rules`。
 - Firebase CLI 專案列表仍回覆 Failed to authenticate（exit 1），尚未部署；本機模擬器通過不代表正式專案同步已驗證。
 - 草稿讀取重試仍回覆 INVALID_ARGUMENT。只能確認網路設定已套用，無法從草稿工具核對安裝／啟動欄位或確認發佈。不要將此問題誤認為使用者新增網域沒有生效。
+
+## 邀請家人修正驗證（2026-11-11）
+
+- 已用完整瀏覽器流程重現：新建日曆的樂觀訂閱可能早於成員寫入在伺服器完成，日曆監聽被拒絕後不會恢復，導致可見邀請按鈕卻缺少日曆資料。修正為等待訂閱的 pending writes 完成，並在日曆資料尚未載入時禁止邀請及提供明確錯誤。
+- 邀請碼使用 Web Crypto `getRandomValues` 的 128 位元安全亂數，避免依賴部分瀏覽器缺少的 `randomUUID`，不使用 Math.random 作為替代。
+- 9 項單元測試通過、正式 build 通過。
+- `tests/invite.browser.mjs` 已在 Auth + Firestore 模擬器通過：註冊並驗證建立者、建立日曆、模擬缺少 randomUUID、產生邀請連結、另一個已驗證帳號加入、確認加入者為檢視者且不可邀請其他人。
+- 使用者截圖已證實先前版本由 Cloud Shell 成功部署。這次修正尚需 Cloud Shell 拉取更新後重新部署。

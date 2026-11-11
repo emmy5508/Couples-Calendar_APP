@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { auth, db } from "./firebase";
 import { today, monthDays, shiftMonth, onDate, addDays } from "./dates";
+import { createInviteToken } from "./invitations";
 import "./style.css";
 const palette = [
   "#b4c9a8",
@@ -68,6 +69,9 @@ const errText = (e) =>
     "permission-denied":
       "沒有操作權限，請確認信箱已驗證，並已部署資料庫安全規則。",
     unavailable: "目前無法連線，請稍後重試",
+    "invite/unsupported-browser":
+      "目前瀏覽器無法產生安全邀請連結，請改用 Safari 或 Chrome 開啟網站。",
+    "invite/calendar-unavailable": "日曆尚未載入完成，請重新整理後再邀請家人。",
   })[e.code] ||
   "操作未完成，請稍後再試。" + (e.code ? "（" + e.code + "）" : "");
 const logout = async () => {
@@ -251,7 +255,21 @@ function App() {
     if (!user?.emailVerified || demo) return;
     return onSnapshot(
       collection(db, "users", user.uid, "subscriptions"),
-      (s) => setSubs(s.docs.map((d) => d.id)),
+      { includeMetadataChanges: true },
+      (s) => {
+        // Do not subscribe to a calendar until the membership batch is committed.
+        // A listener started from an optimistic subscription can be permanently
+        // denied while the server still sees the user as a nonmember.
+        const ids = s.docs
+          .filter((d) => !d.metadata.hasPendingWrites)
+          .map((d) => d.id);
+        setSubs((previous) =>
+          previous.length === ids.length &&
+          previous.every((id, index) => id === ids[index])
+            ? previous
+            : ids,
+        );
+      },
       (e) => setNotice(errText(e)),
     );
   }, [user, demo]);
@@ -387,9 +405,12 @@ function App() {
         setNotice("登入後即可分享真正的邀請連結。");
         return;
       }
-      let token = cal.invite;
+      const currentCalendar =
+        cal || (await getDoc(doc(db, "calendars", active))).data();
+      if (!currentCalendar) throw { code: "invite/calendar-unavailable" };
+      let token = currentCalendar.invite;
       if (!token) {
-        token = crypto.randomUUID().replaceAll("-", "");
+        token = createInviteToken();
         let b = writeBatch(db);
         b.set(doc(db, "invites", token), { calendarId: active });
         b.update(doc(db, "calendars", active), { invite: token });
@@ -755,7 +776,7 @@ function App() {
                 </button>
                 <button
                   className="share"
-                  disabled={busy || !online || role !== "owner"}
+                  disabled={busy || !online || role !== "owner" || !cal}
                   onClick={share}
                 >
                   <Users size={16} />

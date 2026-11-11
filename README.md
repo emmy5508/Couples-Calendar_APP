@@ -119,3 +119,13 @@ FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/wo
 ```
 
 上方舊的「模擬器下載被 403 阻擋」紀錄已解除。Firebase 部署授權仍缺少，環境草稿 API 仍報錯；網路設定確定已套用，其他草稿欄位尚無法由工具核對。最新完整結果見 VALIDATION.md 的最後一節。
+
+### 邀請流程回歸測試
+
+先另開終端執行 `VITE_USE_EMULATORS=true npm run dev -- --port 5174`，再執行：
+
+```sh
+FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/workspace/.firebase-config npx firebase emulators:exec --only auth,firestore --project demo-shared-calendar 'node tests/invite.browser.mjs'
+```
+
+此測試使用兩個隔離的瀏覽器帳號，驗證新日曆的邀請連結產生及家人以檢視者加入，並模擬缺少 randomUUID 的瀏覽器。
