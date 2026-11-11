@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function verified() { return request.auth != null && request.auth.token.email_verified == true; }
+  function cal(c) { return get(/databases/$(database)/documents/calendars/$(c)).data; }
+  function owner(c) { return verified() && cal(c).owner == request.auth.uid; }
+  function member(c) { return verified() && exists(/databases/$(database)/documents/calendars/$(c)/members/$(request.auth.uid)); }
+  function editor(c) { return member(c) && get(/databases/$(database)/documents/calendars/$(c)/members/$(request.auth.uid)).data.role in ['owner','editor']; }
+  match /users/{uid}/subscriptions/{c} {
+   allow read, delete: if verified() && request.auth.uid == uid;
+   allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['calendarId']) && request.resource.data.calendarId == c && existsAfter(/databases/$(database)/documents/calendars/$(c)/members/$(uid));
+  }
+  match /invites/{token} {
+   allow get: if verified();
+   allow list: if false;
+   allow create: if owner(request.resource.data.calendarId) && request.resource.data.keys().hasOnly(['calendarId']) && token.size() >= 32;
+   allow update: if false;
+   allow delete: if owner(resource.data.calendarId);
+  }
+  match /calendars/{c} {
+   allow get: if member(c);
+   allow list: if false;
+   allow create: if verified() && request.resource.data.keys().hasOnly(['name','owner','invite','createdAt']) && request.resource.data.owner == request.auth.uid && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60 && request.resource.data.invite == '';
+   allow update: if owner(c) && request.resource.data.keys().hasOnly(['name','owner','invite','createdAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60 && request.resource.data.createdAt == resource.data.createdAt && (request.resource.data.owner == resource.data.owner || (exists(/databases/$(database)/documents/calendars/$(c)/members/$(request.resource.data.owner)) && getAfter(/databases/$(database)/documents/calendars/$(c)/members/$(request.resource.data.owner)).data.role == 'owner' && getAfter(/databases/$(database)/documents/calendars/$(c)/members/$(request.auth.uid)).data.role == 'editor'));
+   allow delete: if owner(c);
+   match /members/{uid} {
+    allow read: if member(c);
+    allow create: if verified() && uid == request.auth.uid && request.resource.data.keys().hasOnly(['role','email','token']) && request.resource.data.email == request.auth.token.email && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (request.resource.data.role == 'viewer' && get(/databases/$(database)/documents/invites/$(request.resource.data.token)).data.calendarId == c));
+    allow update: if owner(c) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']) && request.resource.data.role in ['owner','editor','viewer'] && ((getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner == uid && request.resource.data.role == 'owner') || (getAfter(/databases/$(database)/documents/calendars/$(c)).data.owner != uid && request.resource.data.role != 'owner'));
+    allow delete: if verified() && (owner(c) || request.auth.uid == uid) && (cal(c).owner != uid || !existsAfter(/databases/$(database)/documents/calendars/$(c)));
+   }
+   match /categories/{id} {
+    allow read: if member(c);
+    allow create, update: if editor(c) && request.resource.data.keys().hasOnly(['name','color','kind']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 40 && request.resource.data.color.matches('^#[0-9a-fA-F]{6}$') && request.resource.data.kind in ['activity','family'];
+    allow delete: if editor(c);
+   }
+   match /events/{id} {
+    allow read: if member(c);
+    allow create, update: if editor(c) && request.resource.data.keys().hasOnly(['title','start','end','allDay','category','family','participants','location','notes','repeat','until','exceptions','createdBy']) && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100 && request.resource.data.start is string && request.resource.data.end >= request.resource.data.start && request.resource.data.repeat in ['none','daily','weekly','monthly'] && request.resource.data.exceptions is map && request.resource.data.family is list && request.resource.data.participants is list;
+    allow delete: if editor(c);
+   }
+  }
+ }
+}
