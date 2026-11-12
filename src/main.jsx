@@ -207,6 +207,9 @@ function App() {
     [serverReady, setServerReady] = useState(false);
   const [nickname, setNickname] = useState("");
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileRevision, setProfileRevision] = useState(0);
+  const profileIdentity = useRef(null);
   const uid = demo ? "demo" : user?.uid,
     role = demo ? "owner" : members.find((m) => m.id === uid)?.role,
     canEdit = role === "owner" || role === "editor";
@@ -257,51 +260,83 @@ function App() {
     }
   };
   useEffect(() => {
-    setNickname("");
+    if (profileIdentity.current !== user?.uid) {
+      profileIdentity.current = user?.uid;
+      setNickname("");
+    }
     setProfileLoaded(false);
     if (!user?.emailVerified || demo) return;
-    return onSnapshot(
-      doc(db, "users", user.uid),
-      (snapshot) => {
-        setNickname(snapshot.data()?.nickname || "");
-        setProfileLoaded(true);
-      },
-      (error) => {
-        setNotice(errText(error));
-        setProfileLoaded(true);
-      },
-    );
-  }, [user?.uid, user?.emailVerified, demo]);
+    let cancelled = false,
+      stop = () => {};
+    const fail = (error) => {
+      if (cancelled) return;
+      setProfileError(errText(error));
+      setProfileLoaded(true);
+    };
+    (async () => {
+      // The account can be verified while the cached ID token still says false
+      // after returning from the verification email. Refresh before attaching
+      // listeners, since a permission-denied listener will not recover itself.
+      if (navigator.onLine) await auth.currentUser.getIdToken(true);
+      if (cancelled) return;
+      stop = onSnapshot(
+        doc(db, "users", user.uid),
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          if (cancelled || snapshot.metadata.hasPendingWrites) return;
+          setNickname(snapshot.data()?.nickname || "");
+          setProfileError("");
+          setProfileLoaded(true);
+        },
+        fail,
+      );
+    })().catch(fail);
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [user?.uid, user?.emailVerified, demo, profileRevision]);
   const saveNickname = async (value) => {
-    const name = normalizeNickname(value);
-    const subscriptions = await getDocs(
-      collection(db, "users", uid, "subscriptions"),
-    );
-    const references = await Promise.all(
-      subscriptions.docs.map(async (subscription) => {
-        const ref = doc(db, "calendars", subscription.id, "members", uid);
-        try {
-          return (await getDoc(ref)).exists() ? ref : null;
-        } catch (error) {
-          if (error.code === "permission-denied") return null;
-          throw error;
-        }
-      }),
-    );
-    const refs = references.filter(Boolean);
-    for (let offset = 0; offset < Math.max(1, refs.length); offset += 400) {
-      const batch = writeBatch(db);
-      batch.set(doc(db, "users", uid), { nickname: name });
-      refs
-        .slice(offset, offset + 400)
-        .forEach((ref) => batch.update(ref, { nickname: name }));
-      await batch.commit();
+    try {
+      const name = normalizeNickname(value);
+      await auth.currentUser.getIdToken(true);
+      const subscriptions = await getDocs(
+        collection(db, "users", uid, "subscriptions"),
+      );
+      const references = await Promise.all(
+        subscriptions.docs.map(async (subscription) => {
+          const ref = doc(db, "calendars", subscription.id, "members", uid);
+          try {
+            return (await getDoc(ref)).exists() ? ref : null;
+          } catch (error) {
+            if (error.code === "permission-denied") return null;
+            throw error;
+          }
+        }),
+      );
+      const refs = references.filter(Boolean);
+      for (let offset = 0; offset < Math.max(1, refs.length); offset += 400) {
+        const batch = writeBatch(db);
+        batch.set(doc(db, "users", uid), { nickname: name });
+        refs
+          .slice(offset, offset + 400)
+          .forEach((ref) => batch.update(ref, { nickname: name }));
+        await batch.commit();
+      }
+      // Navigation must not depend on a listener that may have failed earlier.
+      setNickname(name);
+      setProfileLoaded(true);
+      setProfileError("");
+      setProfileRevision((revision) => revision + 1);
+      setModal((current) => (current === "nickname" ? "" : current));
+      setNotice("暱稱已儲存，家人會看到新的暱稱。");
+    } catch (error) {
+      setProfileError(errText(error));
+      throw error;
     }
-    setModal((current) => (current === "nickname" ? "" : current));
-    setNotice("暱稱已儲存，家人會看到新的暱稱。");
   };
   useEffect(() => {
-    if (!user?.emailVerified || demo) return;
+    if (!user?.emailVerified || demo || !profileLoaded || profileError) return;
     return onSnapshot(
       collection(db, "users", user.uid, "subscriptions"),
       { includeMetadataChanges: true },
@@ -321,7 +356,7 @@ function App() {
       },
       (e) => setNotice(errText(e)),
     );
-  }, [user, demo]);
+  }, [user, demo, profileLoaded, profileError, profileRevision]);
   useEffect(() => {
     if (demo) return;
     setCalendars([]);
@@ -669,7 +704,9 @@ function App() {
           </p>
           <NicknameForm
             nickname=""
-            busy={busy || !online}
+            busy={busy}
+            offline={!online}
+            error={profileError}
             save={(value) => run(() => saveNickname(value))}
           />
           <button className="full" onClick={logout}>
@@ -1247,7 +1284,9 @@ function App() {
           <p className="help">修改後，你加入的日曆都會同步顯示新暱稱。</p>
           <NicknameForm
             nickname={nickname}
-            busy={busy || !online}
+            busy={busy}
+            offline={!online}
+            error={profileError}
             save={(value) => run(() => saveNickname(value))}
           />
         </Modal>
@@ -1473,10 +1512,11 @@ function HolidayRow({ holiday }) {
     </div>
   );
 }
-function NicknameForm({ nickname, busy, save }) {
+function NicknameForm({ nickname, busy, offline, error, save }) {
   const [value, setValue] = useState(nickname);
   return (
     <form
+      aria-busy={busy}
       onSubmit={(event) => {
         event.preventDefault();
         save(value);
@@ -1488,6 +1528,7 @@ function NicknameForm({ nickname, busy, save }) {
           name="nickname"
           autoComplete="nickname"
           value={value}
+          disabled={busy}
           onChange={(event) => setValue(event.target.value)}
           maxLength={30}
           required
@@ -1495,8 +1536,17 @@ function NicknameForm({ nickname, busy, save }) {
         />
       </label>
       <p className="help">1～30 個字，可隨時在帳號或日曆設定修改。</p>
-      <button className="primary full" disabled={busy || !value.trim()}>
-        儲存暱稱
+      {offline && <p className="help">目前離線，請恢復網路後再儲存。</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <button
+        className="primary full"
+        disabled={busy || offline || !value.trim()}
+      >
+        {busy ? "儲存中…" : "儲存暱稱"}
       </button>
     </form>
   );

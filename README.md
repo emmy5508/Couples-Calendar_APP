@@ -145,3 +145,11 @@ FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/wo
 共收錄 2026 年 22 日、2027 年 24 日，包含補假及落在週末的國定假日。資料源自人事行政總處政府辦公日曆表的公開格式整理鏡像；來源、固定版本、授權及取得限制詳見 [docs/holidays-sources.md](docs/holidays-sources.md)。網站「國定假日說明」提供原始資料與整理來源連結。
 
 驗證：`npm test`；先啟動 `npm run dev -- --port 5173`，再執行 `node tests/holidays.browser.mjs` 檢查手機／桌面版日期配色、假日明細與清單。後續年度或臨時停班停課不自行推算，需依最新公告更新資料後部署。
+
+暱稱註冊回歸測試（先啟動上述 5174 模擬器模式網站）：
+
+```sh
+FIREBASE_EMULATORS_PATH=/workspace/.firebase-cache/emulators XDG_CONFIG_HOME=/workspace/.firebase-config npx firebase emulators:exec --only auth,firestore --project demo-shared-calendar 'node tests/nickname-onboarding.browser.mjs'
+```
+
+此測試直接在驗證信中完成驗證後重新開啟網站，不依賴「我已完成驗證」按鈕；檢查登入 token 驗證狀態、空白／離線時的儲存限制、儲存後進入日曆與重新載入後保留暱稱。個人設定監聽會在讀取前刷新登入 token，儲存完成後明確更新畫面狀態，失敗訊息在暱稱表單持續顯示。
