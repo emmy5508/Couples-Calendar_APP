@@ -527,7 +527,7 @@ p {
   color: #929a85;
 }
 .weekdays .saturday {
-  color: #53748d;
+  color: #b55e65;
 }
 .weekdays .sunday {
   color: #b55e65;
@@ -573,14 +573,14 @@ p {
   color: #c9cdbf;
 }
 .day.saturday .day-number {
-  color: #53748d;
+  color: #b55e65;
 }
 .day.sunday .day-number,
 .day.public-holiday .day-number {
   color: #b55e65;
 }
 .day.saturday.muted .day-number {
-  color: #9aaebb;
+  color: #c9a0a3;
 }
 .day.sunday.muted .day-number,
 .day.public-holiday.muted .day-number {
@@ -1556,7 +1556,7 @@ details p {
 }
 
 .day.saturday.is-today .day-number {
-  background: #53748d;
+  background: #b55e65;
   color: white;
 }
 .day.sunday.is-today .day-number,

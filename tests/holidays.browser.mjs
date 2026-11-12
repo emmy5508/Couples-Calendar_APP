@@ -29,7 +29,8 @@ try {
       style(date, ".day-number", "color"),
     ),
   );
-  assert.equal(new Set(colors).size, 3);
+  assert.equal(colors[0], colors[1]);
+  assert.notEqual(colors[0], colors[2]);
   await expect(day("2026-02-17").locator(".holiday-name")).toHaveText("春節");
   await expect(page.locator(".daily .holiday-row")).toContainText("春節");
   await day("2026-02-20").click();
