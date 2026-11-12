@@ -31,6 +31,12 @@ try {
   );
   assert.equal(colors[0], colors[1]);
   assert.notEqual(colors[0], colors[2]);
+  assert.equal(await style('2026-02-23','.day-number','fontWeight'),'700');
+  assert.equal(await style('2026-02-21','.day-number','fontWeight'),'700');
+  assert.notEqual(await style('2026-01-26','.day-number','fontWeight'),'700');
+  assert.equal(colors[2],'rgb(65, 77, 58)');
+  assert.equal(colors[0],'rgb(163, 61, 71)');
+
   await expect(day("2026-02-17").locator(".holiday-name")).toHaveText("春節");
   await expect(page.locator(".daily .holiday-row")).toContainText("春節");
   await day("2026-02-20").click();

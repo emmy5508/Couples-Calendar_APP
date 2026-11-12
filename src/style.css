@@ -1619,3 +1619,17 @@ details p {
     padding: 12px;
   }
 }
+
+/* Emphasize dates in the displayed month; keep adjacent months subdued. */
+.day:not(.muted) .day-number {
+  font-weight: 700;
+  color: #414d3a;
+}
+.day:not(.muted).saturday .day-number,
+.day:not(.muted).sunday .day-number,
+.day:not(.muted).public-holiday .day-number {
+  color: #a33d47;
+}
+.day:not(.muted).is-today .day-number {
+  color: #fff;
+}
