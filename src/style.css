@@ -526,8 +526,11 @@ p {
   text-align: center;
   color: #929a85;
 }
-.weekdays .weekend {
-  color: #b5a58c;
+.weekdays .saturday {
+  color: #53748d;
+}
+.weekdays .sunday {
+  color: #b55e65;
 }
 .month-grid {
   display: grid;
@@ -550,10 +553,6 @@ p {
 .day:nth-child(7n) {
   border-right: 0;
 }
-.day:nth-child(7n),
-.day:nth-child(7n-1) {
-  background: #fcfbf6;
-}
 .day:hover {
   background: #f4f6ed;
 }
@@ -572,6 +571,35 @@ p {
 }
 .muted .day-number {
   color: #c9cdbf;
+}
+.day.saturday .day-number {
+  color: #53748d;
+}
+.day.sunday .day-number,
+.day.public-holiday .day-number {
+  color: #b55e65;
+}
+.day.saturday.muted .day-number {
+  color: #9aaebb;
+}
+.day.sunday.muted .day-number,
+.day.public-holiday.muted .day-number {
+  color: #c9a0a3;
+}
+.holiday-name {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #b55e65;
+  font-size: 9px;
+  line-height: 1.6;
+  text-align: left;
+}
+.muted .holiday-name {
+  color: #c9a0a3;
 }
 .is-today .day-number {
   background: #839773;
@@ -1525,4 +1553,69 @@ details p {
 }
 .profile strong {
   max-width: 100%;
+}
+
+.day.saturday.is-today .day-number {
+  background: #53748d;
+  color: white;
+}
+.day.sunday.is-today .day-number,
+.day.public-holiday.is-today .day-number {
+  background: #b55e65;
+  color: white;
+}
+.holiday-help {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #a26b70;
+  font-size: 10px;
+}
+.holiday-help:hover {
+  background: none;
+  color: #854c51;
+  text-decoration: underline;
+}
+.holiday-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fffefb;
+  border: 1px solid #ece2df;
+  border-left: 3px solid #d6a0a5;
+  border-radius: 10px;
+  padding: 13px 16px;
+  margin: 9px 0;
+}
+.holiday-symbol {
+  border-radius: 7px;
+  padding: 6px 9px;
+  color: #a4535c;
+  background: #f7e8e8;
+  font-size: 11px;
+}
+.holiday-row strong {
+  display: block;
+  font-size: 12px;
+  color: #a4535c;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.holiday-row small {
+  display: block;
+  font-size: 10px;
+  color: #9a8985;
+  margin-top: 4px;
+}
+@media (max-width: 760px) {
+  .holiday-name {
+    font-size: 8px;
+    text-align: center;
+  }
+  .holiday-help {
+    font-size: 8px;
+  }
+  .holiday-row {
+    padding: 12px;
+  }
 }

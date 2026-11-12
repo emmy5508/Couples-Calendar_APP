@@ -49,6 +49,7 @@ import { auth, db } from "./firebase";
 import { today, monthDays, shiftMonth, onDate, addDays } from "./dates";
 import { createInviteToken } from "./invitations";
 import { memberName, normalizeNickname } from "./nicknames";
+import { holidayFor, calendarDayClass, holidaySources } from "./holidays";
 import "./style.css";
 const palette = [
   "#b4c9a8",
@@ -998,7 +999,12 @@ function App() {
                     <div className="weekdays">
                       {["一", "二", "三", "四", "五", "六", "日"].map(
                         (d, i) => (
-                          <span className={i > 4 ? "weekend" : ""} key={d}>
+                          <span
+                            className={
+                              i === 5 ? "saturday" : i === 6 ? "sunday" : ""
+                            }
+                            key={d}
+                          >
                             {d}
                           </span>
                         ),
@@ -1007,19 +1013,37 @@ function App() {
                     <div className="month-grid">
                       {monthDays(month).map((date) => {
                         let es = onDate(visible, date);
+                        const holiday = holidayFor(date);
                         return (
                           <button
                             key={date}
+                            data-date={date}
                             className={
                               "day " +
+                              calendarDayClass(date) +
+                              " " +
                               (date.slice(0, 7) !== month ? "muted " : "") +
                               (date === selected ? "selected-day " : "") +
                               (date === today() ? "is-today" : "")
                             }
                             onClick={() => setSelected(date)}
-                            aria-label={date + "，" + es.length + "個行程"}
+                            aria-label={
+                              date +
+                              (holiday ? "，" + holiday.name : "") +
+                              "，" +
+                              es.length +
+                              "個行程"
+                            }
                           >
                             <span className="day-number">{+date.slice(8)}</span>
+                            {holiday && (
+                              <span
+                                className="holiday-name"
+                                title={holiday.name}
+                              >
+                                {holiday.name}
+                              </span>
+                            )}
                             <div className="day-events">
                               {es.slice(0, 2).map((e) => (
                                 <span
@@ -1064,7 +1088,8 @@ function App() {
                       .filter((d) => d.slice(0, 7) === month)
                       .map((d) => {
                         let es = onDate(visible, d);
-                        return es.length ? (
+                        const holiday = holidayFor(d);
+                        return es.length || holiday ? (
                           <section key={d}>
                             <h3>
                               {+d.slice(5, 7)} 月 {+d.slice(8)} 日{" "}
@@ -1076,6 +1101,7 @@ function App() {
                                 }
                               </small>
                             </h3>
+                            {holiday && <HolidayRow holiday={holiday} />}
                             {es.map((e) => (
                               <EventRow
                                 key={`${e.id}-${e.occurrence}`}
@@ -1092,7 +1118,7 @@ function App() {
                     ).some(
                       (d) =>
                         d.slice(0, 7) === month &&
-                        onDate(visible, d).length > 0,
+                        (onDate(visible, d).length > 0 || holidayFor(d)),
                     ) && (
                       <div className="empty">
                         <Leaf />
@@ -1106,10 +1132,12 @@ function App() {
                     <span className="legend-dot" />
                     今天
                   </span>
-                  <span>
-                    <Heart size={13} />
-                    一起記錄，好好生活
-                  </span>
+                  <button
+                    className="holiday-help"
+                    onClick={() => setModal("holidays")}
+                  >
+                    2026–2027 國定假日說明
+                  </button>
                 </footer>
               </section>
               <section className="daily">
@@ -1128,6 +1156,9 @@ function App() {
                   </h2>
                   <span>{dayEvents.length} 個行程</span>
                 </div>
+                {holidayFor(selected) && (
+                  <HolidayRow holiday={holidayFor(selected)} />
+                )}
                 {loading ? (
                   <p className="empty">正在同步行程…</p>
                 ) : dayEvents.length ? (
@@ -1191,6 +1222,25 @@ function App() {
         >
           <Plus size={27} />
         </button>
+      )}
+      {modal === "holidays" && (
+        <Modal title="國定假日說明" close={() => setModal("")}>
+          <p>
+            已標示 2026、2027
+            年政府辦公日曆表的國定假日與補假；週六以藍色、週日與國定假日以紅色日期區分。
+          </p>
+          <p>假日為固定標示，不列入私人行程數。點選日期可看完整假日名稱。</p>
+          <p>
+            <a href={holidaySources.official} target="_blank" rel="noreferrer">
+              資料出處：行政院人事行政總處／政府資料開放平台
+            </a>
+          </p>
+          <p>
+            <a href={holidaySources.mirror} target="_blank" rel="noreferrer">
+              資料整理：TaiwanCalendar
+            </a>
+          </p>
+        </Modal>
       )}
       {modal === "nickname" && (
         <Modal title="修改我的暱稱" close={() => setModal("")}>
@@ -1405,6 +1455,21 @@ function App() {
           </details>
         </Modal>
       )}
+    </div>
+  );
+}
+function HolidayRow({ holiday }) {
+  return (
+    <div className="holiday-row">
+      <span className="holiday-symbol" aria-hidden="true">
+        休
+      </span>
+      <div>
+        <strong>{holiday.name}</strong>
+        <small>
+          {holiday.kind === "substitute" ? "政府辦公日曆補假" : "國定假日"}
+        </small>
+      </div>
     </div>
   );
 }
